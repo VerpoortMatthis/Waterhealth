@@ -14,6 +14,7 @@ import busio
 from oled_text import OledText
 from oled_text import OledText
 import serial
+import socket
 
 sensor_file_name = '/sys/bus/w1/devices/28-012022646039/w1_slave'
 ph_sens = 0
@@ -28,10 +29,6 @@ def setup_gpio():
     spi = spidev.SpiDev()
     spi.open(0,0)
     spi.max_speed_hz = 10 ** 5
-    # disp = lcd()
-    # disp.lcd_clear()
-    # disp.backlight(0)
-    # disp.lcd_display_string("test")
     setupSerial()
 
 def setupSerial():
@@ -40,12 +37,25 @@ def setupSerial():
     ser.reset_input_buffer()
     time.sleep(2)
 
+hostname = socket. gethostname()
+IPAddr = socket. gethostbyname(hostname)
+print("Your Computer Name is:" + hostname)
+print("Your Computer IP Address is:" + IPAddr)
+
 
 i2c = busio.I2C(SCL, SDA)
 # Create the display, pass its pixel dimensions
 oled = OledText(i2c, 128, 64)
 # Write to the oled
 # oled.layout = Layout64.layout_3medium_3icons()
+
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip_addr = s.getsockname()[0]
+    s.close()
+    return ip_addr
+oled.text(get_ip(), 4)
 
 def read_spi(channel):
     global spi
@@ -74,22 +84,24 @@ def read_ldr(): #works
     print(upm)
     # print("oegaboega")
     ldr_waarde = read_spi(0)
-    DataRepository.update_meting(upm["deviceid"], ldr_waarde, datetime.now())
+    DataRepository.create_meting(upm["deviceid"], ldr_waarde, datetime.now())
     socketio.emit('B2F_meting_ldr', {'waarde': ldr_waarde}, broadcast=True)
     print(id)
-    oled.text(ldr_waarde, 2)  # Line 2
+    ldr = "ldr:", str(round(read_spi(0)/950*100, 2))
+    oled.text(ldr, 2)  # Line 2
     time.sleep(1)
 
 def read_temp(): #works
-    global oled
+    global oled, temp_waarde
     upm = DataRepository.read_device_onderwerp("temperature")
     print(upm)
     # print("stonks")  
     temp_waarde = temp_sens()
-    DataRepository.update_meting(upm["deviceid"], temp_waarde, datetime.now())
+    DataRepository.create_meting(upm["deviceid"], temp_waarde, datetime.now())
     socketio.emit('B2F_temp_sens', {'waarde': temp_waarde}, broadcast=True)
     print(id)
-    oled.text(temp_waarde, 1)  # Line 1
+    temp = "temp:", temp_sens()
+    oled.text(temp, 1) # Line 1
     time.sleep(1)
 
 def read_ph():
@@ -97,10 +109,11 @@ def read_ph():
     print(upm)
     # print("moooooooooo")
     ph_waarde = read_serialport()
-    DataRepository.update_meting(upm["deviceid"], ph_waarde, datetime.now())
+    DataRepository.create_meting(upm["deviceid"], ph_waarde, datetime.now())
     socketio.emit('B2F_ph_sens', {'waarde': ph_waarde}, broadcast=True)
     print(id)
-    oled.text(ph_waarde, 3)  # Line 3
+    ph = "ph:", read_serialport()
+    oled.text(ph, 3) # Line 3
     time.sleep(1)
 
 
@@ -131,6 +144,30 @@ def get_history_temp():
         temps = DataRepository.read_history_temp()
         return jsonify(temps), 200
 
+@app.route(endpoint + '/ph', methods=['GET'])
+def get_history_ph():
+    if request.method == 'GET':
+        temps = DataRepository.read_history_ph()
+        return jsonify(temps), 200
+
+@app.route(endpoint + '/ldr', methods=['GET'])
+def get_history_ldr():
+    if request.method == 'GET':
+        temps = DataRepository.read_history_ldr()
+        return jsonify(temps), 200
+
+@app.route(endpoint + '/juni', methods=['GET'])
+def get_history_temp_jun():
+    if request.method == 'GET':
+        temps = DataRepository.read_history_temp_juni()
+        return jsonify(temps), 200
+
+@app.route(endpoint + '/meting', methods=['POST'])
+def post_nieuwe_meting():
+    gegevens = DataRepository.json_or_formdata(request)
+    nieuw = DataRepository.create_meting(gegevens['deviceid'],
+            gegevens['gemeten_waarde'], gegevens['datum'])
+    return jsonify(nieuw), 200
 
 @socketio.on('connect')# Send to the client!
 def initial_connection():

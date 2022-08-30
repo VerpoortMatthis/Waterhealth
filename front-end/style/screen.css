@@ -278,7 +278,7 @@ a {
 
 a:visited,
 a:active {
-  color: white;
+  color: black;
 }
 
 a:hover {
@@ -1109,6 +1109,8 @@ a:focus {
   Inlined to avoid the additional HTTP request:
   http://www.phpied.com/delay-loading-your-print-css/
 */
+
+
 
 @media print {
 
